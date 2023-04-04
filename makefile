@@ -16,7 +16,7 @@ OBJS = $(wildcard $(*.o))
 LIBS = $(LIB_DIR)/libcodecA.so $(LIB_DIR)/libcodecB.so
 
 # Default target: build all libraries and the main program
-all: $(LIBS) encode decode cmp copy shell
+all: $(LIBS) encode decode cmp copy stshell
 
 cmp: cmp.c
 	$(CC) $(CFLAGS) $< -o $@
@@ -25,7 +25,7 @@ copy: copy.c
 	$(CC) $(CFLAGS) $< -o $@
 
 # The shell like program
-shell: shell.c
+stshell: shell.c
 	$(CC) $(CFLAGS) $< -o $@
 
 # Build shared library for codec A
@@ -52,7 +52,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 
 # Clean up the build directory and all generated files
 clean:
-	rm -rf $(BUILD_DIR) $(LIB_DIR) codec cmp copy shell
+	rm -rf $(BUILD_DIR) $(LIB_DIR) codec cmp copy stshell encode decode comp
 
 # Phony targets
 .PHONY: all clean
