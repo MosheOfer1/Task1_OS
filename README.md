@@ -28,7 +28,7 @@ The program supports an -i flag to ignore case when comparing files. The usage a
 **Usage:**
 
 ```shell
-cmp <file1> <file2> -v
+./cmp <file1> <file2> -v
 ```
 
 **Output:**
@@ -50,7 +50,7 @@ The usage and output examples are as follows:
 **Usage:**
 
 ```shell
-copy <file1> <file2> -v
+./copy <file1> <file2> -v
 ```
 
 **Output:**
