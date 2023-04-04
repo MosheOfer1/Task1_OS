@@ -20,6 +20,8 @@ int num_cmds;
 
 void sigint_handler(int sig)
 {
+	if (DEBUG)
+		printf("Received SIGINT has %d cmds\n",num_cmds);
 	for (int i = 0; i < num_cmds; i++)
 	{
 		if (sig == SIGINT && pids[i] != getpid())
@@ -39,8 +41,10 @@ void close_pipes(int (*pipes)[2], int num_pipes)
 	{
 		int c1 = close(pipes[p][0]);
 		int c2 = close(pipes[p][1]);
-		if (DEBUG) fprintf(stderr, "%d code when closed [%d] [0] by %d\n", c1, p, getpid());
-		if (DEBUG) fprintf(stderr, "%d code when closed [%d] [1] by %d\n", c2, p, getpid());
+		if (DEBUG)
+			fprintf(stderr, "%d code when closed [%d] [0] by %d\n", c1, p, getpid());
+		if (DEBUG)
+			fprintf(stderr, "%d code when closed [%d] [1] by %d\n", c2, p, getpid());
 	}
 }
 
@@ -56,6 +60,7 @@ int main()
 	char **cmds[MAX_CMD_LEN];
 	char *args[MAX_ARGS];
 	char *token;
+	int output_fd = STDOUT_FILENO; // default output is stdout
 
 	if (sigaction(SIGINT, &sa, NULL) == -1)
 	{
@@ -64,14 +69,22 @@ int main()
 	}
 	while (1)
 	{
+		output_fd = STDOUT_FILENO;
 		num_cmds = 0;
-		printf("hello: ");
-		fgets(cmd, 1024, stdin);
-		cmd[strlen(cmd) - 1] = '\0'; // replace \n with \0
+		strcpy(cmd,"");
+		while (strcmp(cmd,"") == 0)
+		{
+			printf("hello: ");
+			fgets(cmd, 1024, stdin);
+			cmd[strlen(cmd) - 1] = '\0'; // replace \n with \0
+		}
+		
+		//printf("got: %s\n",cmd);
 		i = 0;
 		token = strtok(cmd, " ");
 		while (token != NULL)
 		{
+			// pipe
 			if (strcmp(token, "|") == 0)
 			{
 				args[i] = NULL;
@@ -86,6 +99,38 @@ int main()
 				token = strtok(NULL, " ");
 				continue;
 			}
+			// redirect
+			else if ((strcmp(token, ">") == 0 || strcmp(token, ">>") == 0) && i > 0)
+			{
+				args[i] = NULL;
+				cmds[num_cmds] = (char **)malloc(sizeof(char *) * MAX_ARGS);
+				for (int x = 0; x < i; x++)
+				{
+					cmds[num_cmds][x] = (char *)malloc(sizeof(char) * (i + 1));
+					strcpy(cmds[num_cmds][x], args[x]);
+				}
+				char *sign = token;
+				token = strtok(NULL, " ");
+				// Redirect output to file
+				if (strcmp(sign, ">") == 0)
+				{
+					output_fd = open(token, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+				}
+				// ">>" appends
+				else
+				{
+					output_fd = open(token, O_WRONLY | O_CREAT | O_APPEND, 0644);
+				}
+
+				if (output_fd == -1)
+				{
+					if(DEBUG) perror("open");
+					//exit(EXIT_FAILURE);
+				}
+				token = strtok(NULL, " ");
+				continue;
+			}
+
 			args[i] = token;
 			token = strtok(NULL, " ");
 			i++;
@@ -98,6 +143,11 @@ int main()
 			strcpy(cmds[num_cmds][x], args[x]);
 		}
 		num_cmds++;
+
+		if (strcmp(cmds[0][0], "exit") == 0)
+		{
+			return 0;
+		}
 
 		if (DEBUG)
 			printf("num of commends: %d\n", num_cmds);
@@ -131,17 +181,22 @@ int main()
 						printf("output: p[1] = %d, from = %s\n", pipes[i][1], cmds[i][0]);
 					dup2(pipes[i][1], STDOUT_FILENO);
 				}
-				
-				close_pipes(pipes, num_cmds-1);
-				if (DEBUG) fprintf(stderr, "fin\n");
-				//  Execute the current command
+				// The last one
+				else
+				{
+					dup2(output_fd, STDOUT_FILENO);
+				}
 
+				// Child close pipes
+				close_pipes(pipes, num_cmds - 1);
+
+				//  Execute the current command
 				if (execvp(cmds[i][0], cmds[i]) < 0)
 				{
 					if (DEBUG)
 						perror("execvp");
 				}
-				close_pipes(pipes, num_cmds-1);
+				close_pipes(pipes, num_cmds - 1);
 				exit(1);
 			}
 			else if (pids[i] > 0)
@@ -155,22 +210,24 @@ int main()
 				exit(1);
 			}
 		}
+
+		// Closing all pipes
 		if (DEBUG)
 			printf("parent: close all pipes\n");
-		close_pipes(pipes, num_cmds-1);
+		close_pipes(pipes, num_cmds - 1);
+
 		// Wait for all child processes to finish
 		int status;
 		for (int p1 = 0; p1 < num_cmds; p1++)
 		{
 			if (DEBUG)
-				printf("parent: wait to %d\n",pids[p1]);
+				printf("parent: wait to %d\n", pids[p1]);
 			waitpid(pids[p1], &status, 0);
 		}
-
-
 		if (DEBUG)
-			printf("child died\n");
+			printf("All children died\n");
 
+		// Free the allocated bytes of cmds
 		for (int x = 0; x < num_cmds; x++)
 		{
 			int y = 0;
